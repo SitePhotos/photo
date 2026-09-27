@@ -409,6 +409,49 @@ if (!PROJECT_NAME) {
   doneWrap.classList.add("show");
   document.getElementById("doneTitle").textContent = "This link isn't set up correctly";
   document.getElementById("doneText").textContent = "This page is missing a project reference. Please contact the management office and let them know this QR code or link needs to be checked.";
+} else {
+  // Before showing the form, ask the backend whether THIS project is still
+  // open. This reuses the same "done screen" styling as a temporary
+  // "checking..." splash so there's no separate UI to build. If the check
+  // fails for any reason (e.g. no internet yet), we fail OPEN and show the
+  // form anyway — the backend's own check at submit time is still the final
+  // safeguard either way, so a network hiccup here never wrongly blocks a
+  // legitimate submission.
+  const formWrap = document.getElementById("formWrap");
+  const doneWrap = document.getElementById("doneWrap");
+  formWrap.classList.add("hidden");
+  doneWrap.classList.add("show");
+  document.getElementById("doneSpinner").style.display = "block";
+  document.getElementById("doneTitle").textContent = "Checking submission status…";
+  document.getElementById("doneText").textContent = "Please wait a moment.";
+
+  checkProjectStatus();
+}
+
+async function checkProjectStatus() {
+  const formWrap = document.getElementById("formWrap");
+  const doneWrap = document.getElementById("doneWrap");
+  const doneSpinner = document.getElementById("doneSpinner");
+  const doneTitle = document.getElementById("doneTitle");
+  const doneText = document.getElementById("doneText");
+
+  try {
+    const res = await fetch(`${UPLOAD_ENDPOINT}?project=${encodeURIComponent(PROJECT_NAME)}`);
+    const result = await res.json();
+
+    if (result.status === "closed") {
+      doneSpinner.style.display = "none";
+      doneTitle.textContent = "Submissions closed";
+      doneText.textContent = result.message || "The submission period for this project has ended. Please contact the management office if you need help.";
+      return; // keep the form hidden — do not reveal it
+    }
+  } catch (err) {
+    // Network/check failure — fall through and show the form as normal.
+  }
+
+  // Open (or the check couldn't be completed) — reveal the form.
+  doneWrap.classList.remove("show");
+  formWrap.classList.remove("hidden");
 }
 
 /* ============ BUILD CATEGORY UI ============ */
@@ -772,6 +815,13 @@ submitBtn.addEventListener("click", async () => {
     // even for logical failures — so the real outcome is read from the
     // JSON body instead of res.status.
     const result = await res.json();
+
+    if (result.status === "closed") {
+      doneSpinner.style.display = "none";
+      doneTitle.textContent = "Submissions closed";
+      doneText.textContent = result.message || "The submission period for this project has ended. Please contact the management office if you need help.";
+      return;
+    }
 
     if (result.status === "duplicate") {
       doneSpinner.style.display = "none";
